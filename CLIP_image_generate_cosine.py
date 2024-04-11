@@ -22,7 +22,7 @@ image_embeds = outputs.image_embeds
 text_model = CLIPTextModelWithProjection.from_pretrained("openai/clip-vit-base-patch32")
 tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
-text_inputs = tokenizer(["Two cats on a blue blanket in a cartoon style"], padding=True, return_tensors="pt")
+text_inputs = tokenizer(["Two ships at sea"], padding=True, return_tensors="pt")
 
 outputs = text_model(**text_inputs)
 text_embeds = outputs.text_embeds
@@ -35,7 +35,7 @@ print(f'image_inputs: {image_inputs.pixel_values.shape}')
 
 
 # FGSM attack function
-def fgsm_attack(image, text_embeds, model, lr, L=60):
+def fgsm_attack(image, text_embeds, model, lr, L=-0.6):
     image = torch.nn.Parameter(image.clone())
     # image = torch.nn.Parameter(torch.rand(image.size()))
     image.requires_grad = True
@@ -55,8 +55,9 @@ def fgsm_attack(image, text_embeds, model, lr, L=60):
         optimizer.zero_grad()
         outputs = image_model(image)
         image_embeds = outputs.image_embeds
-        diff_vec = text_embeds-image_embeds
-        loss = (diff_vec) @(diff_vec).T
+
+        # Cosine similary negated
+        loss = -(text_embeds @ image_embeds.T) / text_embeds.norm(p=2) / image_embeds.norm(p=2)
         loss.backward(retain_graph=True)
         optimizer.step()
         print(f'loss: {loss}')
@@ -69,5 +70,5 @@ def fgsm_attack(image, text_embeds, model, lr, L=60):
     save_im = Image.fromarray((save_im * 255).astype('uint8'))
     save_im.save("save_im.png")
 
-fgsm_attack(image_inputs.pixel_values, text_embeds, image_model, 0.001)
+fgsm_attack(image_inputs.pixel_values, text_embeds, image_model, 0.01)
 
