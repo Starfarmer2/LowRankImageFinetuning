@@ -18,24 +18,29 @@ image_inputs = processor(images=image, return_tensors="pt")
 outputs = image_model(**image_inputs)
 image_embeds = outputs.image_embeds
 
-# Text embeddings
+# Text embeddings (Dual objectives, original and new captions)
 text_model = CLIPTextModelWithProjection.from_pretrained("openai/clip-vit-base-patch32")
 tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
-text_inputs = tokenizer(["Two ships at sea"], padding=True, return_tensors="pt")
+correct_text_inputs = tokenizer(["Two cats on a red blanket"], padding=True, return_tensors="pt")
+incorrect_text_inputs = tokenizer(["Two ships at sea"], padding=True, return_tensors="pt")
 
-outputs = text_model(**text_inputs)
-text_embeds = outputs.text_embeds
+outputs = text_model(**correct_text_inputs)
+correct_text_embeds = outputs.text_embeds
 
-diff_vec = text_embeds-image_embeds
-loss = (diff_vec) @(diff_vec).T
-print((diff_vec).shape)
+outputs = text_model(**incorrect_text_inputs)
+incorrect_text_embeds = outputs.text_embeds
+
+diff_vec_from_correct = correct_text_embeds-image_embeds
+diff_vec_from_incorrect = incorrect_text_embeds-image_embeds
+
+loss = (diff_vec_from_incorrect) @(diff_vec_from_incorrect).T - (diff_vec_from_correct) @(diff_vec_from_correct).T
 print(f'initial loss: {loss}')
 print(f'image_inputs: {image_inputs.pixel_values.shape}')
 
 
 # FGSM attack function
-def fgsm_attack(image, text_embeds, model, lr, L=-0.6):
+def fgsm_attack(image, correct_text_embeds, incorrect_text_embeds, model, lr, L=-20):
     image = torch.nn.Parameter(image.clone())
     # image = torch.nn.Parameter(torch.rand(image.size()))
     image.requires_grad = True
@@ -55,9 +60,10 @@ def fgsm_attack(image, text_embeds, model, lr, L=-0.6):
         optimizer.zero_grad()
         outputs = image_model(image)
         image_embeds = outputs.image_embeds
+        diff_vec_from_correct = correct_text_embeds-image_embeds
+        diff_vec_from_incorrect = incorrect_text_embeds-image_embeds
 
-        # Cosine similary negated
-        loss = -(text_embeds @ image_embeds.T) / text_embeds.norm(p=2) / image_embeds.norm(p=2)
+        loss = (diff_vec_from_incorrect) @(diff_vec_from_incorrect).T - (diff_vec_from_correct) @(diff_vec_from_correct).T
         loss.backward(retain_graph=True)
         optimizer.step()
         print(f'loss: {loss}')
@@ -70,5 +76,5 @@ def fgsm_attack(image, text_embeds, model, lr, L=-0.6):
     save_im = Image.fromarray((save_im * 255).astype('uint8'))
     save_im.save("save_im.png")
 
-fgsm_attack(image_inputs.pixel_values, text_embeds, image_model, 0.01)
+fgsm_attack(image_inputs.pixel_values, correct_text_embeds, incorrect_text_embeds, image_model, 0.1)
 

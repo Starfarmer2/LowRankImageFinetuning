@@ -35,7 +35,7 @@ print(f'image_inputs: {image_inputs.pixel_values.shape}')
 
 
 # FGSM attack function
-def fgsm_attack(image, text_embeds, model, lr, L=60):
+def fgsm_attack(image, text_embeds, model, lr, L=40):
     image = torch.nn.Parameter(image.clone())
     # image = torch.nn.Parameter(torch.rand(image.size()))
     image.requires_grad = True
@@ -69,5 +69,5 @@ def fgsm_attack(image, text_embeds, model, lr, L=60):
     save_im = Image.fromarray((save_im * 255).astype('uint8'))
     save_im.save("save_im.png")
 
-fgsm_attack(image_inputs.pixel_values, text_embeds, image_model, 0.001)
+fgsm_attack(image_inputs.pixel_values, text_embeds, image_model, 0.1)
 
