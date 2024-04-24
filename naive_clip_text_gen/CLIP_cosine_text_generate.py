@@ -2,6 +2,7 @@ from PIL import Image
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.optim.lr_scheduler as lr_scheduler
 import requests
 from transformers import AutoProcessor, CLIPVisionModelWithProjection, AutoTokenizer, CLIPTextModelWithProjection
 
@@ -85,7 +86,7 @@ processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 # image = Image.open(requests.get(url, stream=True).raw)
-image = Image.open('treeera.png')
+image = Image.open('car.png')
 # image.save('raw_image.png')
 
 image_inputs = processor(images=image, return_tensors="pt")
@@ -101,7 +102,7 @@ for param in text_model.parameters():
 
 # correct_text_inputs = tokenizer(["Fire Eating James Ben Water Jazz"], padding=True, return_tensors="pt")
 # correct_text_inputs = tokenizer(["Five cars red"], padding=True, return_tensors="pt")
-correct_text_inputs = tokenizer(["Ben ive cars red hospital ten yuan six ca"], padding=True, return_tensors="pt")
+correct_text_inputs = tokenizer(["Calculator dog eat cat yum"], padding=True, return_tensors="pt")
 incorrect_text_inputs = tokenizer(["Two dogs on a blue blanket"], padding=True, return_tensors="pt")
 # print(f'correct_text_inputs: {correct_text_inputs}')
 
@@ -141,14 +142,37 @@ loss = (diff_vec) @(diff_vec).T
 print(f'initial loss: {loss}')
 
 
+def cosine_similarity(vec1, vec2):
+    """
+    Compute the cosine similarity between two vectors.
+
+    Parameters:
+    - vec1 (Tensor): The first vector.
+    - vec2 (Tensor): The second vector.
+
+    Returns:
+    - similarity (Tensor): The cosine similarity between the two vectors.
+    """
+    # Normalize the vectors to unit length
+    vec1 = nn.functional.normalize(vec1, p=2, dim=1)
+    vec2 = nn.functional.normalize(vec2, p=2, dim=1)
+    
+    # Compute cosine similarity
+    similarity = torch.matmul(vec1, vec2.t())
+    
+    return similarity
+
+
 # FGSM attack function
-def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_embeds, incorrect_text_embeds, encoder_layer, final_norm_layer, text_projection_layer, lr, L=26):
+def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_embeds, incorrect_text_embeds, encoder_layer, final_norm_layer, text_projection_layer, lr, L=-0.43):#L=-0.68):
     new_token_vectors = torch.nn.Parameter(original_token_vectors.clone())
     new_token_vectors.requires_grad = True
     optimizer = optim.AdamW([new_token_vectors], lr=lr)
     
     # Iteratively update weights, end condition loss <= L
     loss = 1000
+    # Example: Using StepLR
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.3)
     while loss > L:
         optimizer.zero_grad()
         new_combined_vectors = new_token_vectors + original_position_vectors
@@ -178,8 +202,8 @@ def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_
         diff_vec_from_incorrect = incorrect_text_embeds-new_text_embeds
 
         # print(f'diff_vec_from_correct: {diff_vec_from_correct.shape}')
-        loss = (diff_vec_from_incorrect[0]) @(diff_vec_from_incorrect[0]).T # - (diff_vec_from_correct) @(diff_vec_from_correct).T
-        print(f'loss: {loss}')
+        loss = -cosine_similarity(incorrect_text_embeds, new_text_embeds) + (diff_vec_from_incorrect @ diff_vec_from_incorrect.T)/100
+        # print(f'loss: {loss}')
         loss.backward(retain_graph=True)
 
         # Do not modify first and last tokens
@@ -197,6 +221,8 @@ def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_
         # print(f'original_position.grad: {original_position_vectors.grad}')
 
         optimizer.step()
+        scheduler.step()
+        print("Loss {}; Learning Rate: {}".format(loss, scheduler.get_last_lr()))
 
     # Print text
     text_outputs = find_matching_ids(token_embedding_layer.weight.data, new_token_vectors)
@@ -209,7 +235,7 @@ def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_
 
 
 if __name__ == '__main__':
-    fgsm_attack(correct_token_vectors, correct_position_vectors, correct_text_embeds, image_embeds, encoder_layer=encoder_layer, final_norm_layer=final_norm_layer, text_projection_layer=text_projection_layer, lr=1)
+    fgsm_attack(correct_token_vectors, correct_position_vectors, correct_text_embeds, image_embeds, encoder_layer=encoder_layer, final_norm_layer=final_norm_layer, text_projection_layer=text_projection_layer, lr=100)
     None
 
 
