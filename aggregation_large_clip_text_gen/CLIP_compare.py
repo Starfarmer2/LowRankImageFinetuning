@@ -20,7 +20,7 @@ text_model = CLIPTextModelWithProjection.from_pretrained("openai/clip-vit-large-
 tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-large-patch14")
 
 # inputs = tokenizer(["two striped cats sleeping and"], padding=True, return_tensors="pt")
-inputs = tokenizer(["hollywood qb origin honda hollywood"], padding=True, return_tensors="pt")
+# inputs = tokenizer(["reference baptist answered robertson gravity testimony fodils halloffame greatly dyslexia karanjohar salads lasers gy receiver âĤ¬ zenith tively skid kens collier shaman poole kennel people mac bwfc herman walker eves ayo oshi reconstruction ible armored nips ^_^ boc schoice toyota ditional debts arers cale walters deer chung kiki pavilion kaa evenings between strive croissant powder and varying tarot illustrator vial"], padding=True, return_tensors="pt")
 # inputs = tokenizer(["patriotic elovers transmission Đ kent"], padding=True, return_tensors="pt")
 # inputs = tokenizer(["Two cats on a red blanket"], padding=True, return_tensors="pt")
 # inputs = tokenizer(["pereira africa shirt spoken shut roh ject output python"], padding=True, return_tensors="pt")

@@ -104,6 +104,7 @@ for param in text_model.parameters():
 # correct_text_inputs = tokenizer(["Five cars red"], padding=True, return_tensors="pt")
 # correct_text_inputs = tokenizer(["As the sun set, the quiet whispers of the forest seemed to tell a forgotten story"], padding=True, return_tensors="pt")
 correct_text_inputs = tokenizer(["Under the dim light, a man in a faded green shirt leaned thoughtfully against a stark gray wall, his eyes lost in a book, completely absorbed in the twisting plot, oblivious to the bustling world around him, creating a striking contrast between his vivid imagination and the monochrome backdrop."], padding=True, return_tensors="pt")
+# correct_text_inputs = tokenizer(["Under the dim light, a man in a faded green shirt leaned thoughtfully against a stark gray wall, his eyes lost in a book, completely absorbed in the twisting plot, oblivious to the bustling world around him, creating a striking contrast between his vivid imagination and the monochrome backdrop.Under the dim light, a man in a faded green shirt leaned thoughtfully against a stark gray wall, his eyes lost in a book, completely absorbed in the twisting plot, oblivious to the bustling world around him, creating a striking contrast between his vivid imagination and the monochrome backdrop."], padding=True, return_tensors="pt")
 incorrect_text_inputs = tokenizer(["Two dogs on a blue blanket"], padding=True, return_tensors="pt")
 # print(f'correct_text_inputs: {correct_text_inputs}')
 
@@ -166,21 +167,22 @@ def cosine_similarity(vec1, vec2):
 #tee: cale skool negligence howe realised san moon walled bbl ips snsd jada holic reopened conv kahn soweto
 
 # FGSM attack function
-def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_embeds, incorrect_text_embeds, encoder_layer, final_norm_layer, text_projection_layer, lr, L=2.7):#L=-0.68):
+def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_embeds, incorrect_text_embeds, encoder_layer, final_norm_layer, text_projection_layer, lr, L=220):#L=-0.68):
     new_token_vectors = torch.nn.Parameter(original_token_vectors.clone())
     new_token_vectors.requires_grad = True
-    optimizer = optim.Adam([new_token_vectors], lr=lr)
+    optimizer = optim.Adagrad([new_token_vectors], lr=lr)
     
     # Iteratively update weights, end condition loss <= L
     loss = 1000
     # Example: Using StepLR
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=70, gamma=0.5)
+    iteration = 0
     while loss > L:
         optimizer.zero_grad()
         new_combined_vectors = new_token_vectors + original_position_vectors
         # new_inputs['input_ids'] = new_inputs['input_ids'] * 0 + new_ids.int()
 
-        print(f'new_token_vectors: {new_token_vectors.shape}')
+        # print(f'new_token_vectors: {new_token_vectors.shape}')
         # print(f'original_position_vectors: {original_position_vectors}')
         outputs = encoder_layer(new_combined_vectors)
         # print(f'outputs_last_hidden_state: {outputs.shape}')
@@ -189,7 +191,7 @@ def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_
         outputs = torch.mean(outputs, dim=1) # pool all the outputs into 512
         outputs = text_projection_layer(outputs)
         new_text_embeds = outputs
-        print(f'new_text_embeds: {new_text_embeds.shape}')
+        # print(f'new_text_embeds: {new_text_embeds.shape}')
         # print(f'new_text_embeds: {new_text_embeds.shape}')
         # print(f'correct_text_embeds: {correct_text_embeds.shape}')
         # print(f'print grads:')
@@ -199,13 +201,13 @@ def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_
         #             print(param.grad)
         #             print(param.grad[param.grad != 0])
                     
-        diff_vec_from_correct = correct_text_embeds-new_text_embeds
+        # diff_vec_from_correct = correct_text_embeds-new_text_embeds
         
         diff_vec_from_incorrect = incorrect_text_embeds-new_text_embeds
 
         # print(f'diff_vec_from_correct: {diff_vec_from_correct.shape}')
         # loss = -cosine_similarity(incorrect_text_embeds, new_text_embeds) + (diff_vec_from_incorrect @ diff_vec_from_incorrect.T)/100
-        loss = (diff_vec_from_incorrect @ diff_vec_from_incorrect.T)/100
+        loss = (diff_vec_from_incorrect @ diff_vec_from_incorrect.T)
         # print(f'loss: {loss}')
         loss.backward(retain_graph=True)
 
@@ -225,7 +227,9 @@ def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_
 
         optimizer.step()
         scheduler.step()
-        print("Loss {}; Learning Rate: {}".format(loss, scheduler.get_last_lr()))
+        iteration += 1
+        if iteration % 5 == 0:
+            print("Loss {}; Learning Rate: {}".format(loss, scheduler.get_last_lr()))
 
     # Print text
     text_outputs = find_matching_ids(token_embedding_layer.weight.data, new_token_vectors)
@@ -239,7 +243,7 @@ def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_
 
 if __name__ == '__main__':
 
-    fgsm_attack(correct_token_vectors, correct_position_vectors, correct_text_embeds, image_embeds, encoder_layer=encoder_layer, final_norm_layer=final_norm_layer, text_projection_layer=text_projection_layer, lr=1)
+    fgsm_attack(correct_token_vectors, correct_position_vectors, correct_text_embeds, image_embeds, encoder_layer=encoder_layer, final_norm_layer=final_norm_layer, text_projection_layer=text_projection_layer, lr=10)
     None
 
 
