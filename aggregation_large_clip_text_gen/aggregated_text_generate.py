@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 import requests
+import numpy as np
 from transformers import AutoProcessor, CLIPVisionModelWithProjection, AutoTokenizer, CLIPTextModelWithProjection
 
 
@@ -86,7 +87,7 @@ processor = AutoProcessor.from_pretrained("openai/clip-vit-large-patch14")
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 # image = Image.open(requests.get(url, stream=True).raw)
-image = Image.open('tee.png')
+image = Image.open('ramen.png')
 # image.save('raw_image.png')
 
 image_inputs = processor(images=image, return_tensors="pt")
@@ -103,7 +104,8 @@ for param in text_model.parameters():
 # correct_text_inputs = tokenizer(["Fire Eating James Ben Water Jazz"], padding=True, return_tensors="pt")
 # correct_text_inputs = tokenizer(["Five cars red"], padding=True, return_tensors="pt")
 # correct_text_inputs = tokenizer(["As the sun set, the quiet whispers of the forest seemed to tell a forgotten story"], padding=True, return_tensors="pt")
-correct_text_inputs = tokenizer(["Under the dim light, a man in a faded green shirt leaned thoughtfully against a stark gray wall, his eyes lost in a book, completely absorbed in the twisting plot, oblivious to the bustling world around him, creating a striking contrast between his vivid imagination and the monochrome backdrop."], padding=True, return_tensors="pt")
+# correct_text_inputs = tokenizer(["Palm sky tree palm, a man in a faded green shirt leaned thoughtfully against a stark gray wall, his eyes lost in a book, completely absorbed in the twisting plot, oblivious to the bustling world around him, creating a striking contrast between his vivid imagination and the monochrome backdrop."], padding=True, return_tensors="pt")
+correct_text_inputs = tokenizer(["Sunflower bouquet flower yellow, a man in a faded green shirt leaned thoughtfully against a stark gray wall, his eyes lost in a book, completely absorbed in the twisting plot, oblivious to the bustling world around him, creating a striking contrast between his vivid imagination and the monochrome backdrop."], padding=True, return_tensors="pt")
 # correct_text_inputs = tokenizer(["Under the dim light, a man in a faded green shirt leaned thoughtfully against a stark gray wall, his eyes lost in a book, completely absorbed in the twisting plot, oblivious to the bustling world around him, creating a striking contrast between his vivid imagination and the monochrome backdrop.Under the dim light, a man in a faded green shirt leaned thoughtfully against a stark gray wall, his eyes lost in a book, completely absorbed in the twisting plot, oblivious to the bustling world around him, creating a striking contrast between his vivid imagination and the monochrome backdrop."], padding=True, return_tensors="pt")
 incorrect_text_inputs = tokenizer(["Two dogs on a blue blanket"], padding=True, return_tensors="pt")
 # print(f'correct_text_inputs: {correct_text_inputs}')
@@ -167,16 +169,17 @@ def cosine_similarity(vec1, vec2):
 #tee: cale skool negligence howe realised san moon walled bbl ips snsd jada holic reopened conv kahn soweto
 
 # FGSM attack function
-def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_embeds, incorrect_text_embeds, encoder_layer, final_norm_layer, text_projection_layer, lr, L=220):#L=-0.68):
+def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_embeds, incorrect_text_embeds, encoder_layer, final_norm_layer, text_projection_layer, lr, L=120):#L=-0.68):
     new_token_vectors = torch.nn.Parameter(original_token_vectors.clone())
     new_token_vectors.requires_grad = True
-    optimizer = optim.Adagrad([new_token_vectors], lr=lr)
+    optimizer = optim.AdamW([new_token_vectors], lr=lr)
     
     # Iteratively update weights, end condition loss <= L
     loss = 1000
     # Example: Using StepLR
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=70, gamma=0.5)
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.4)
     iteration = 0
+    prev_losses = []
     while loss > L:
         optimizer.zero_grad()
         new_combined_vectors = new_token_vectors + original_position_vectors
@@ -229,7 +232,10 @@ def fgsm_attack(original_token_vectors, original_position_vectors, correct_text_
         scheduler.step()
         iteration += 1
         if iteration % 5 == 0:
+            prev_losses.append(loss)
             print("Loss {}; Learning Rate: {}".format(loss, scheduler.get_last_lr()))
+            if torch.std(torch.stack(prev_losses[-5:]),dim=0) < 1.0:
+                break
 
     # Print text
     text_outputs = find_matching_ids(token_embedding_layer.weight.data, new_token_vectors)
